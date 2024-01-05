@@ -365,8 +365,15 @@ SUBROUTINE INTERNAL_STEP
 
   DPDAYS = days(inttime)
   SPDAYS = DPDAYS
-  IF(SEDIMENT_MODEL)CALL ADVANCE_SED(DTI,spdays,taubm_n(1:m))
 
+
+  IF(SEDIMENT_MODEL)THEN
+   !WRITE(IPT,*)'before sed conc',SUM(SUM(sed(6)%conc,dim=1))
+   !WRITE(IPT,*)'before sed mass bot',SUM(sed(6)%mass)
+    CALL ADVANCE_SED(DTI,spdays,taubm_n(1:m))
+   !WRITE(IPT,*)'after sed conc',SUM(SUM(sed(6)%conc,dim=1))
+   !WRITE(IPT,*)'after sed mass bot',SUM(sed(6)%mass)
+  ENDIF
   IF(MORPHO_MODEL)THEN
     if(mod(sed_its,morpho_incr)==0 .and. sed_its > morpho_strt)then
        CALL UPDATE_DEPTH
@@ -374,6 +381,7 @@ SUBROUTINE INTERNAL_STEP
   ENDIF
 
 # endif
+
 
 # if defined (BioGen)
   IF(BIOLOGICAL_MODEL)CALL BIO_3D1D                           

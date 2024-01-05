@@ -119,6 +119,9 @@ MODULE MOD_FORCE
      TYPE(NCVAR), POINTER :: SED8_N,SED8_P
      TYPE(NCVAR), POINTER :: SED9_N,SED9_P
      TYPE(NCVAR), POINTER :: SED10_N,SED10_P
+     TYPE(NCVAR), POINTER :: SED11_N,SED11_P
+     TYPE(NCVAR), POINTER :: SED12_N,SED12_P
+     TYPE(NCVAR), POINTER :: SED13_N,SED13_P
 # endif
 # if defined (BioGen)
      TYPE(NCVAR), POINTER :: BIO1_N,BIO1_P
@@ -2031,6 +2034,12 @@ CONTAINS
        NULLIFY(RIVER_FORCING(I)%SED9_P)
        NULLIFY(RIVER_FORCING(I)%SED10_N)
        NULLIFY(RIVER_FORCING(I)%SED10_P)
+       NULLIFY(RIVER_FORCING(I)%SED11_N)
+       NULLIFY(RIVER_FORCING(I)%SED11_P)
+       NULLIFY(RIVER_FORCING(I)%SED12_N)
+       NULLIFY(RIVER_FORCING(I)%SED12_P)
+       NULLIFY(RIVER_FORCING(I)%SED13_N)
+       NULLIFY(RIVER_FORCING(I)%SED13_P)
 # endif         
 # if defined (BioGen)
        NULLIFY(RIVER_FORCING(I)%BIO1_N)
@@ -2632,6 +2641,66 @@ CONTAINS
        ENDIF
 
        IF(N_SED > 10)THEN
+       VAR => FIND_VAR(NCF,TRIM(SED_NAMES(11)),FOUND)
+       IF(.NOT.FOUND)CALL FATAL_ERROR &
+            & ("IN RIVER FILE COULD NOT FIND SED DATA FOR SED TYPE", &
+            & TRIM(SED_NAMES(11)) )
+
+       ALLOCATE(STORAGE_VEC(nrs), stat = status)
+       IF(STATUS /= 0) CALL FATAL_ERROR("ALLOCATION ERROR IN RIVER_DISCHARGE")
+       RIVER_FORCING(I)%SED11_N => reference_var(var)
+       CALL NC_CONNECT_PVAR(RIVER_FORCING(I)%SED11_N,STORAGE_VEC)
+       NULLIFY(STORAGE_VEC)
+
+       ALLOCATE(STORAGE_VEC(nrs), stat = status)
+       IF(STATUS /= 0) CALL FATAL_ERROR("ALLOCATION ERROR IN RIVER_DISCHARGE")
+       RIVER_FORCING(I)%SED11_P => reference_var(var)
+       CALL NC_CONNECT_PVAR(RIVER_FORCING(I)%SED11_P,STORAGE_VEC)
+       NULLIFY(STORAGE_VEC)
+
+       ENDIF
+
+       IF(N_SED > 11)THEN
+       VAR => FIND_VAR(NCF,TRIM(SED_NAMES(12)),FOUND)
+       IF(.NOT.FOUND)CALL FATAL_ERROR &
+            & ("IN RIVER FILE COULD NOT FIND SED DATA FOR SED TYPE", &
+            & TRIM(SED_NAMES(12)) )
+
+       ALLOCATE(STORAGE_VEC(nrs), stat = status)
+       IF(STATUS /= 0) CALL FATAL_ERROR("ALLOCATION ERROR IN RIVER_DISCHARGE")
+       RIVER_FORCING(I)%SED12_N => reference_var(var)
+       CALL NC_CONNECT_PVAR(RIVER_FORCING(I)%SED12_N,STORAGE_VEC)
+       NULLIFY(STORAGE_VEC)
+
+       ALLOCATE(STORAGE_VEC(nrs), stat = status)
+       IF(STATUS /= 0) CALL FATAL_ERROR("ALLOCATION ERROR IN RIVER_DISCHARGE")
+       RIVER_FORCING(I)%SED12_P => reference_var(var)
+       CALL NC_CONNECT_PVAR(RIVER_FORCING(I)%SED12_P,STORAGE_VEC)
+       NULLIFY(STORAGE_VEC)
+
+       ENDIF
+
+       IF(N_SED > 12)THEN
+       VAR => FIND_VAR(NCF,TRIM(SED_NAMES(13)),FOUND)
+       IF(.NOT.FOUND)CALL FATAL_ERROR &
+            & ("IN RIVER FILE COULD NOT FIND SED DATA FOR SED TYPE", &
+            & TRIM(SED_NAMES(13)) )
+
+       ALLOCATE(STORAGE_VEC(nrs), stat = status)
+       IF(STATUS /= 0) CALL FATAL_ERROR("ALLOCATION ERROR IN RIVER_DISCHARGE")
+       RIVER_FORCING(I)%SED13_N => reference_var(var)
+       CALL NC_CONNECT_PVAR(RIVER_FORCING(I)%SED13_N,STORAGE_VEC)
+       NULLIFY(STORAGE_VEC)
+
+       ALLOCATE(STORAGE_VEC(nrs), stat = status)
+       IF(STATUS /= 0) CALL FATAL_ERROR("ALLOCATION ERROR IN RIVER_DISCHARGE")
+       RIVER_FORCING(I)%SED13_P => reference_var(var)
+       CALL NC_CONNECT_PVAR(RIVER_FORCING(I)%SED13_P,STORAGE_VEC)
+       NULLIFY(STORAGE_VEC)
+
+       ENDIF
+
+       IF(N_SED > 13)THEN
        CALL FATAL_ERROR &
             & ("MOD_FORCE NOT SETUP FOR N_SED > 10 REVISE")  
        ENDIF
@@ -2672,6 +2741,15 @@ CONTAINS
        end if	 
        if(n_sed>9)then
          river_forcing(i)%sed10_n%curr_stkcnt = 0; river_forcing(i)%sed10_p%curr_stkcnt = 0
+       end if	 
+       if(n_sed>10)then
+         river_forcing(i)%sed11_n%curr_stkcnt = 0; river_forcing(i)%sed11_p%curr_stkcnt = 0
+       end if	 
+       if(n_sed>11)then
+         river_forcing(i)%sed12_n%curr_stkcnt = 0; river_forcing(i)%sed12_p%curr_stkcnt = 0
+       end if	 
+       if(n_sed>12)then
+         river_forcing(i)%sed13_n%curr_stkcnt = 0; river_forcing(i)%sed13_p%curr_stkcnt = 0
        end if	 
 
        ! --------------------------------------------------------------------------------
@@ -12804,6 +12882,9 @@ CONTAINS
        if (FTM%PREV_WGHT .gt. 0.5_sp) current = VPP  
        DO J =1,NRSF
           IND = RIVER_FORCING(I)%RIV_FILE2LOC(J)
+          !if(msr)then
+          !    write(*,*)' river idx ',J,IND
+          !endif
           IF(IND /= 0) SED(IND,6) = CURRENT(J)
        END DO
        DEALLOCATE(CURRENT)
@@ -12885,6 +12966,46 @@ CONTAINS
        DO J =1,NRSF
           IND = RIVER_FORCING(I)%RIV_FILE2LOC(J)
           IF(IND /= 0) SED(IND,10) = CURRENT(J)
+       END DO
+       DEALLOCATE(CURRENT)
+       ENDIF
+       
+       ! RIVER SEDIMENT LOAD FOR SED11
+       IF(N_SED > 10)THEN
+       VAR_N => RIVER_FORCING(I)%SED11_N
+       VAR_P => RIVER_FORCING(I)%SED11_P
+       CALL UPDATE_VAR_BRACKET(NCF,VAR_P,VAR_N,RIVTIME,STATUS)
+       IF (STATUS /= 0) THEN
+          CALL FATAL_ERROR("COULD NOT UPATE RIVER_FILE TIME BRACKET: BOUNDS EXCEEDED?")
+       end if
+       ALLOCATE(CURRENT(NRSF))
+       CALL NC_POINT_VAR(VAR_N,VNP)
+       CALL NC_POINT_VAR(VAR_P,VPP)        
+       CURRENT = VNP
+       if (FTM%PREV_WGHT .gt. 0.5_sp) current = VPP  
+       DO J =1,NRSF
+          IND = RIVER_FORCING(I)%RIV_FILE2LOC(J)
+          IF(IND /= 0) SED(IND,11) = CURRENT(J)
+       END DO
+       DEALLOCATE(CURRENT)
+       ENDIF
+
+       ! RIVER SEDIMENT LOAD FOR SED12
+       IF(N_SED > 11)THEN
+       VAR_N => RIVER_FORCING(I)%SED12_N
+       VAR_P => RIVER_FORCING(I)%SED12_P
+       CALL UPDATE_VAR_BRACKET(NCF,VAR_P,VAR_N,RIVTIME,STATUS)
+       IF (STATUS /= 0) THEN
+          CALL FATAL_ERROR("COULD NOT UPATE RIVER_FILE TIME BRACKET: BOUNDS EXCEEDED?")
+       end if
+       ALLOCATE(CURRENT(NRSF))
+       CALL NC_POINT_VAR(VAR_N,VNP)
+       CALL NC_POINT_VAR(VAR_P,VPP)        
+       CURRENT = VNP
+       if (FTM%PREV_WGHT .gt. 0.5_sp) current = VPP  
+       DO J =1,NRSF
+          IND = RIVER_FORCING(I)%RIV_FILE2LOC(J)
+          IF(IND /= 0) SED(IND,12) = CURRENT(J)
        END DO
        DEALLOCATE(CURRENT)
        ENDIF

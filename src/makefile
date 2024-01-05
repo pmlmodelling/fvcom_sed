@@ -74,7 +74,7 @@ MODS  = mod_prec.F	sinter.F	mod_types.F	mod_time.F	\
 	mod_northpole.F mod_pwp.F	mod_dye.F	mod_optimal_interpolation.F\
 	mod_report.F	mod_probe.F	mod_gotm.F	mod_balance_2d.F\
 	mod_tridiag.F	mod_scal.F	mod_meanflow.F	mod_obcs2.F	\
-	mod_obcs3.F	mod_sed.F	mod_enkf.F	mod_etkf.F	\
+	mod_obcs3.F mod_sed.F	mod_enkf.F	mod_etkf.F	\
 	mod_rrk.F	mod_rrkf_obs.F	mod_rrkassim.F	mod_enkf_ncd.F	\
 	enkf_ncdio.F	mod_enkf_obs.F	mod_enkfassim.F mod_assim.F	\
 	mod_nesting.F	mod_visit.F     mod_plbc.F mod_dam.F		\

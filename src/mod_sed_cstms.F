@@ -327,8 +327,28 @@ Subroutine Advance_Sed(DTin,Tin,taub_in)
   real(sp), intent(in ) :: taub_in(m) 
   integer :: ierr
 
-  if(dbg_set(dbg_sbr)) write(ipt,*) "Start: Advance_Sed_CSTMS "
+  real(sp) :: WEIGHTS(M)
+  INTEGER  :: II, IBND, KK, I, K
+  real(sp) :: sed_old(KBM1)
+  real(sp) :: sed_new(KBM1)
+  real(sp) :: total_old,total_new,temp_old,temp_new
 
+  real(sp) :: sed_before_settling(KBM1)
+  real(sp) :: sed_between_settling_fluxes(KBM1)
+  real(sp) :: sed_between_fluxes_sed_bed(KBM1)
+  real(sp) :: sed_after_sed_bed(KBM1)
+  
+
+  real(sp) :: col_before_settle,mpi_col_before_settle
+  real(sp) :: bot_before_settle,mpi_bot_before_settle
+  real(sp) :: col_between_settling_fluxes,mpi_col_between_settling_fluxes
+  real(sp) :: bot_between_settling_fluxes,mpi_bot_between_settling_fluxes
+  real(sp) :: col_between_fluxes_sed_bed,mpi_col_between_fluxes_sed_bed
+  real(sp) :: bot_between_fluxes_sed_bed,mpi_bot_between_fluxes_sed_bed
+  real(sp) :: col_after_sed_bed,mpi_col_after_sed_bed
+  real(sp) :: bot_after_sed_bed,mpi_bot_after_sed_bed
+
+  if(dbg_set(dbg_sbr)) write(ipt,*) "Start: Advance_Sed_CSTMS "
   !------------------------------------------------------
   !Check for Initialization
   !------------------------------------------------------
@@ -344,6 +364,22 @@ Subroutine Advance_Sed(DTin,Tin,taub_in)
      write(*,*)'========Sed Model Initiated======='
   endif
 
+     WEIGHTS = ART1(1:M)
+#   if defined (MULTIPROCESSOR) 
+     IF(PAR) THEN
+        DO II=1,M
+           IF(NDE_ID(II) == 1) THEN   !! INTERNAL BOUNDARY NODE (SHARED BETWEEN SUBDOMAINS)
+              DO IBND=1,NBN
+                IF(BN_LOC(IBND) == II) WEIGHTS(II) = WEIGHTS(II)/BN_MLT(IBND)
+              END DO
+           END IF
+        END DO
+     END IF
+#   endif  
+  DO k=1,KBM1
+    sed_old(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+  END DO
+  total_old = SUM(sed_old)+SUM(sedbed%bed_mass(1:m,1, nnew, 6)*WEIGHTS(1:m))
   !------------------------------------------------------
   !Set up Model Forcing  -> time step and bottom shear 
   !Convert taux/tauy to node-based values
@@ -398,6 +434,12 @@ Subroutine Advance_Sed(DTin,Tin,taub_in)
      !  Compute sediment vertical settling.
      !-----------------------------------------------------------------------
      !
+     DO k=1,KBM1
+          sed_before_settling(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+     END DO
+     col_before_settle = SUM(sed_before_settling)
+     bot_before_settle = SUM(sedbed%bed_mass(1:m,1, nnew, 6)*WEIGHTS(1:m))
+
      CALL calc_sed_settling
 
      !
@@ -405,7 +447,19 @@ Subroutine Advance_Sed(DTin,Tin,taub_in)
      !  Compute bed-water column exchanges: erosion and deposition.
      !-----------------------------------------------------------------------
      !
+     DO k=1,KBM1
+          sed_between_settling_fluxes(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+     END DO
+     col_between_settling_fluxes = SUM(sed_between_settling_fluxes)
+     bot_between_settling_fluxes = SUM(sedbed%bed_mass(1:m,1, nnew, 6)*WEIGHTS(1:m))
+
      CALL calc_sed_fluxes
+     DO k=1,KBM1
+          sed_between_fluxes_sed_bed(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+     END DO
+     col_between_fluxes_sed_bed = SUM(sed_between_fluxes_sed_bed)
+     bot_between_fluxes_sed_bed = SUM(sedbed%bed_mass(1:m,1, nnew, 6)*WEIGHTS(1:m))
+
      !
 
      !-----------------------------------------------------------------------
@@ -438,6 +492,11 @@ Subroutine Advance_Sed(DTin,Tin,taub_in)
   else
      CALL calc_sed_bed
   endif
+  DO k=1,KBM1
+      sed_after_sed_bed(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+  END DO
+  col_after_sed_bed = SUM(sed_after_sed_bed)
+  bot_after_sed_bed = SUM(sedbed%bed_mass(1:m,1, nnew, 6)*WEIGHTS(1:m))
   !
   !-----------------------------------------------------------------------
   !  Compute sediment bed biodiffusivity.
@@ -491,6 +550,56 @@ Subroutine Advance_Sed(DTin,Tin,taub_in)
   !------------------------------------------------------
   !
 
+  DO k=1,KBM1
+    sed_new(k)=SUM(DBLE(sed(6)%cnew(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+  END DO
+  total_new = SUM(sed_new)+SUM(sedbed%bed_mass(1:m,1, nnew, 6)*WEIGHTS(1:m))
+  if(mod(sed_its,n_report)==0)call sed_report   
+
+# if defined (MULTIPROCESSOR)
+  IF(PAR)THEN
+  CALL MPI_REDUCE(total_old,temp_old,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  CALL MPI_REDUCE(total_new,temp_new,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+
+  CALL MPI_REDUCE(col_before_settle,mpi_col_before_settle,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  CALL MPI_REDUCE(bot_before_settle,mpi_bot_before_settle,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+
+  CALL MPI_REDUCE(col_between_settling_fluxes,mpi_col_between_settling_fluxes,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  CALL MPI_REDUCE(bot_between_settling_fluxes,mpi_bot_between_settling_fluxes,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+
+  CALL MPI_REDUCE(col_between_fluxes_sed_bed,mpi_col_between_fluxes_sed_bed,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  CALL MPI_REDUCE(bot_between_fluxes_sed_bed,mpi_bot_between_fluxes_sed_bed,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+
+  CALL MPI_REDUCE(col_after_sed_bed,mpi_col_after_sed_bed,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  CALL MPI_REDUCE(bot_after_sed_bed,mpi_bot_after_sed_bed,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  ENDIF
+#  endif
+
+  if(msr)then
+      write(*,*)'start                              :',temp_old
+      write(*,*)'end                                :',temp_new
+      write(*,*)'diff                               :',temp_new-temp_old
+      write(*,*)'------------------'
+      write(*,*)'col before_settle                  :',mpi_col_before_settle
+      write(*,*)'col between_settle_fluxes          :',mpi_col_between_settling_fluxes
+      write(*,*)'col between_flux_sed_bed           :',mpi_col_between_fluxes_sed_bed
+      write(*,*)'col after_sed_bed                  :',mpi_col_after_sed_bed
+      write(*,*)'------------------'
+      write(*,*)'col settle_fluxes/settle           :',mpi_col_between_settling_fluxes - mpi_col_before_settle
+      write(*,*)'col fluxes_sed_bed/settle_fluxes   :',mpi_col_between_fluxes_sed_bed - mpi_col_between_settling_fluxes
+      write(*,*)'col sed_bed/fluxes_sed_bed         :',mpi_col_after_sed_bed - mpi_col_between_fluxes_sed_bed
+      write(*,*)'------------------'
+      write(*,*)'bot before_settle                  :',mpi_bot_before_settle
+      write(*,*)'bot between_settle_fluxes          :',mpi_bot_between_settling_fluxes
+      write(*,*)'bot between_flux_sed_bed           :',mpi_bot_between_fluxes_sed_bed
+      write(*,*)'bot after_sed_bed                  :',mpi_bot_after_sed_bed
+      write(*,*)'------------------'
+      write(*,*)'bot settle_fluxes/settle           :',mpi_bot_between_settling_fluxes - mpi_bot_before_settle
+      write(*,*)'bot fluxes_sed_bed/settle_fluxes   :',mpi_bot_between_fluxes_sed_bed - mpi_bot_between_settling_fluxes
+      write(*,*)'bot sed_bed/fluxes_sed_bed         :',mpi_bot_after_sed_bed - mpi_bot_between_fluxes_sed_bed
+      write(*,*)'------------------'
+      write(*,*)'total_settle_diff                  :', (mpi_col_after_sed_bed + mpi_bot_after_sed_bed) - (mpi_col_before_settle + mpi_bot_before_settle)
+  endif
   if(mod(sed_its,n_report)==0)call sed_report   
 
   RETURN
@@ -2579,8 +2688,8 @@ End Subroutine Read_Sed_Params
      DO k=kbm1,1,-1
         sed(ised)%conc(i,k)=sed(ised)%conc(i,k)+(FC(k)-FC(k+1))
      END DO
-     sedbed%settling_flux(i,ised)=FC(kb)
-
+     sedbed%settling_flux(i,ised) = FC(kb) * (d(i)*dz(i,kb))
+     sed(ised)%conc(i,kbm1)=sed(ised)%conc(i,kbm1) - sedbed%settling_flux(i,ised) / (d(i)*dz(i,kbm1))
     END DO SED_LOOP
 
   END DO
@@ -2695,11 +2804,11 @@ End Subroutine Read_Sed_Params
                &         MIN(MAX(0.0_sp,cff2*(cff*tau_w(i)-1.0_sp)),      &
                &             MIN(cff3*bottom(i,iactv),cff4)+              &
                &                cff5)
-
           !
           !  Update global tracer variables (mT units) for erosive flux.
           !
-          sed(ised)%conc(i,kbm1)=sed(ised)%conc(i,kbm1)+sedbed%ero_flux(i,ised)
+          sed(ised)%conc(i,kbm1)=sed(ised)%conc(i,kbm1)+sedbed%ero_flux(i,ised) / (d(i)*dz(i,kbm1))
+
           if (SED_TAU_CD_CONST .or. SED_TAU_CD_LIN)then
              sed(ised)%conc(i,kbm1)=sed(ised)%conc(i,kbm1) +               &
                   &                       (sedbed%settling_flux(i,ised)-cff5)

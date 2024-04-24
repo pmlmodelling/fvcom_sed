@@ -82,7 +82,7 @@ Use Mod_Prec
 Use Mod_Types
 Use Mod_wd
 Use Control, only : seddis
-Use all_vars!,only : CNSTNT,UNIFORM,SEDIMENT_PARAMETER_TYPE
+Use all_vars,only : CNSTNT,UNIFORM,SEDIMENT_PARAMETER_TYPE
 # if defined (WAVE_CURRENT_INTERACTION)
 USE MOD_WAVE_CURRENT_INTERACTION
 # endif
@@ -951,14 +951,13 @@ End Subroutine Setup_Sed
   real(sp), intent(in ) :: DTin,Tin
   real(sp), intent(in ) :: taub_in(m)
 
+  integer :: i,k,ised,l1,l2,ierr,d_cdis,d_cflx
+  character(len=4) :: fnum
+  real(sp) :: fact,ufact,temp
   real(sp) :: WEIGHTS(M)
   INTEGER  :: II, IBND, KK
   real(sp) :: sed_new(KBM1)
   real(sp) :: total_new,temp_new
-
-  integer :: i,k,ised,l1,l2,ierr,d_cdis,d_cflx
-  character(len=4) :: fnum
-  real(sp) :: fact,ufact,temp
 
   if(dbg_set(dbg_sbr)) write(ipt,*) "Start: Advance_Sed "
      WEIGHTS = ART1(1:M)
@@ -1162,7 +1161,7 @@ End Subroutine Setup_Sed
     temp = min(float(sed_its/sed_ramp), 1.0)*sed_alpha
     if(.not.sed_nudge) temp = 0.0
     do i=1,nsed 
-       call bcond_scal_OBC_SED(sed(i)%conc, &
+       call bcond_scal_OBC(sed(i)%conc, &
                            sed(i)%cnew, &
                            sed(i)%cflx, &
                            sed(i)%cobc, &
@@ -2066,8 +2065,8 @@ End Subroutine Setup_Sed
         sed(ised)%conc(i,kbm1) = sed(ised)%conc(i,kbm1) + sed(ised)%eflx(i)/(d(i)*dz(i,kbm1))
 # if defined (WET_DRY)
       else
-        sed(ised)%conc(i,kbm1) = sed(ised)%conc(i,kbm1)
-       end if
+        sed(ised)%conc(i,kbm1) = 0.0_sp
+      end if
 # endif
     end do
   end do

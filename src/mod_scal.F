@@ -51,7 +51,7 @@ Module Scalar
 !------------------------------------------------------------------------------|
 
   use all_vars
-  use lims, only: m,mt,n,nt,kbm1,kb
+  use lims, only: m,mt,n,nt,kbm1,kb,numqbc
   use bcs
   use mod_obcs
 # if defined (MULTIPROCESSOR)
@@ -1062,6 +1062,111 @@ Module Scalar
 
   return
   End Subroutine Bcond_Scal_OBC 
+  
+  Subroutine Bcond_Scal_OBC_SED(f,fn,fflux_obc,f_obc,deltat,alpha_nudge)
+
+!------------------------------------------------------------------------------|
+  use all_vars
+  use bcs
+  use mod_obcs
+  implicit none
+  real(sp), intent(in   ), dimension(0:mt,kb)      :: f 
+  real(sp), intent(inout), dimension(0:mt,kb)      :: fn
+!JQI NOV2021
+  real(sp), intent(in   ), dimension(iobcn,kbm1) :: fflux_obc  ! KURT GLAESEMANN - remove + 1 from dimension
+!JQI NOV2021
+  real(sp), intent(in   ), dimension(iobcn       ) :: f_obc 
+  real(sp), intent(in   )                          :: deltat
+  real(sp), intent(in   )                          :: alpha_nudge 
+!--local-------------------------------------------
+  real(sp) :: f2d,f2d_next,f2d_obc,xflux2d,tmp
+  integer  :: i,j,k,j1,j11,j22
+  real(sp) ::wqmmax,wqmmin
+
+!------------------------------------------------------------------------------|
+       
+!--------------------------------------------
+! Set Scalar Value on Open Boundary
+!-------------------------------------------
+  if(iobcn > 0) then
+    do i=1,iobcn
+      j=i_obc_n(i)
+      j1=next_obc(i)
+      f2d=0.0_sp
+      f2d_next=0.0_sp
+      xflux2d=0.0_sp
+      do k=1,kbm1
+        f2d=f2d+fn(j,k)*dz(j,k)
+        f2d_next=f2d_next+fn(j1,k)*dz(j,k)
+        xflux2d=xflux2d+fflux_obc(i,k)!*dz(j,k)
+      end do
+  
+      if(uard_obcn(i) > 0.0_sp) then
+        tmp=xflux2d+f2d*uard_obcn(i)
+        f2d_obc=(f2d*dt(j)-tmp*deltat/art1(j))/dtfa(j)
+       ! addapted from FABM treatment of OBC
+       if (f2d_next /= 0) then
+        do k=1,kbm1
+!              FABM_F(J,K,IFABM)=T2D_OBC+(FABM_F(J1,K,IFABM)-T2D_NEXT)  !
+!              Original code similar to mod_bio_3D.F
+         ! Mass Preserving implementation
+         fn(j,k) = fn(j1, k)*(f2d_obc / f2d_next) ! proportionality per layer. T2 have concentrations units
+         ! Other alternatives 
+!             FABM_F(J,K,IFABM) = FABM_F(J1,K,IFABM) ! See bcon_scal_OBC.F for this crazyness
+        end do
+       else
+        do k=1,kbm1
+          fn(j,k)= f2d_obc!+(fn(j1,k)-f2d_next)
+        end do
+        endif
+         do k=1,kbm1
+           ! Minimum and maximum of the values at [horizontally] neighboring cell centers.
+           wqmmax = maxval(f(nbsn(j,1:ntsn(j)),k))
+           wqmmin = minval(f(nbsn(j,1:ntsn(j)),k))
+
+           ! Minimum and maximum of the values at [vertically] neighbouring top and bottom interfaces of the cell.
+           ! Values at the interfaces are found through linear interpolation, accounting for differences in sigma height.
+           if(k == 1)then
+            wqmmax = MAX(wqmmax,(f(j,k)*dz(j,k+1)+f(j,k+1)*dz(j,k))/  &
+                 (dz(j,k)+dz(j,k+1)))
+            wqmmin = min(wqmmin,(f(j,k)*dz(j,k+1)+f(j,k+1)*dz(j,k))/  &
+                 (dz(j,k)+dz(j,k+1)))
+           else if(k == kbm1)then
+            wqmmax = max(wqmmax,(f(j,k)*dz(j,k-1)+f(j,k-1)*dz(j,k))/  &
+                 (dz(j,k)+dz(j,k-1)))
+            wqmmin = min(wqmmin,(f(j,k)*dz(j,k-1)+f(j,k-1)*dz(j,k))/  &
+                 (dz(j,k)+dz(j,k-1)))
+           else
+            wqmmax = max(wqmmax,(f(j,k)*dz(j,k-1)+f(j,k-1)*dz(j,k))/  &
+                 (dz(j,k)+dz(j,k-1)), &
+                    (f(j,k)*dz(j,k+1)+f(j,k+1)*dz(j,k))/  &
+             (dz(j,k)+dz(j,k+1)))
+            wqmmin = min(wqmmin,(f(j,k)*dz(j,k-1)+f(j,k-1)*dz(j,k))/  &
+                 (dz(j,k)+dz(j,k-1)), &
+                    (f(j,k)*dz(j,k+1)+f(j,k+1)*dz(j,k))/  &
+             (dz(j,k)+dz(j,k+1)))
+           end if
+ 
+           ! clip to extremes of all neighbours. the effect of this should be dampening of grid-scale oscillations.
+           if(wqmmin-fn(j,k) > 0.0_sp)fn(j,k) = wqmmin
+           if(fn(j,k)-wqmmax > 0.0_sp)fn(j,k) = wqmmax
+
+         end do
+
+
+      else
+        do k=1,kbm1
+          fn(j,k) = f(j,k)-alpha_nudge*(f(j,k)-f_obc(i))
+        end do
+      end if
+    end do
+    do k=1,kbm1
+      fn(j,k) = 0*f(j,k)!-alpha_nudge*(f(j,k)-f_obc(i))
+    end do
+  endif
+
+  return
+  End Subroutine Bcond_Scal_OBC_SED
 !==============================================================================|
 !==============================================================================|
 

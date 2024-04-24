@@ -177,7 +177,7 @@ public
 ! DTsed     : sediment model time step (seconds)
 ! T_model   : model time (seconds)
 ! taub      : array to hold bottom shear stress
-! rho0      : mean density parameter used to convert tau/rho to tau
+! rho0      : mean density parameter used to aonvert tau/rho to tau
 ! thck_cr   : critical thickness for initiating new surface layer (m)
 ! n_report  : iteration interval for statistics printing
 ! sed_start : start interval for sed model
@@ -950,17 +950,51 @@ End Subroutine Setup_Sed
   Implicit None
   real(sp), intent(in ) :: DTin,Tin
   real(sp), intent(in ) :: taub_in(m)
+  real(sp) :: c_save(M,KBM1)
+  real(sp) :: sed_old(KBM1)
+  real(sp) :: sed_before_advec(KBM1)
+  real(sp) :: sed_after_advec(KBM1)
+  real(sp) :: sed_new(KBM1)
 
   real(sp) :: WEIGHTS(M)
   INTEGER  :: II, IBND, KK
-  real(sp) :: sed_new(KBM1)
-  real(sp) :: total_new,temp_new
+  real(sp) :: sed_before_dep(KBM1)
+  real(sp) :: sed_between_dep_err(KBM1)
+  real(sp) :: sed_after_err(KBM1)
+  real(sp) :: sed_before_vdif(KBM1)
+  real(sp) :: sed_after_vdif(KBM1)
+  real(sp) :: total_before_vdif, temp_before_vdif
+  real(sp) :: total_after_vdif, temp_after_vdif
 
+  real(sp) :: bot_before_dep, temp_bot_before_dep
+  real(sp) :: bot_between_dep_err, temp_bot_between_dep_err
+  real(sp) :: bot_after_err, temp_bot_after_err
+
+  real(sp) :: bot_before_sediment, temp_bot_before_sediment
+  real(sp) :: bot_after_sediment, temp_bot_after_sediment
+
+
+  real(sp) :: total_old,total_new,temp_old,temp_new
+  real(sp) :: total_before_dep,temp_before_dep
+  real(sp) :: total_between_dep_err,temp_between_dep_err
+  real(sp) :: total_after_err,temp_after_err
+  real(sp) :: sum_dep,temp_dep
+  real(sp) :: sum_err,temp_err
+
+
+  real(sp) :: temp_obc(6)
+
+  real(sp) :: total_settle_before, temp_settle_before,total_advec_before,temp_advec_before
+  real(sp) :: total_settle_after, temp_settle_after,total_advec_after,temp_advec_after
+  
   integer :: i,k,ised,l1,l2,ierr,d_cdis,d_cflx
   character(len=4) :: fnum
   real(sp) :: fact,ufact,temp
+  
+  integer  :: cnt,jj,cc
 
   if(dbg_set(dbg_sbr)) write(ipt,*) "Start: Advance_Sed "
+
      WEIGHTS = ART1(1:M)
 #   if defined (MULTIPROCESSOR) 
      IF(PAR) THEN
@@ -973,7 +1007,6 @@ End Subroutine Setup_Sed
         END DO
      END IF
 #   endif
-
   !------------------------------------------------------
   !Check for Initialization
   !------------------------------------------------------
@@ -987,6 +1020,11 @@ End Subroutine Setup_Sed
     write(*,*)'========Sed Model Initiated======='
   endif
 
+!  DO k=1,KBM1
+!    sed_old(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+!  END DO
+!  total_old = SUM(sed_old)+SUM(sed(6)%mass(1:m,1)*WEIGHTS(1:m))
+  !cbot_save = sed(6)%mass
   !------------------------------------------------------
   !set bed age to current model time if first sed call 
   !------------------------------------------------------
@@ -1031,21 +1069,38 @@ End Subroutine Setup_Sed
 
   if(susload)then
     !calculated depositional flux from settling
+
+!      DO k=1,KBM1
+!        sed_before_dep(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+!      END DO
+!      total_before_dep = SUM(sed_before_dep)
+!      bot_before_dep = SUM(sed(6)%mass(1:m,1)*WEIGHTS(1:m))
+
     call calc_deposition
 
+!      DO k=1,KBM1
+!        sed_between_dep_err(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+!      END DO
+!      total_between_dep_err = SUM(sed_between_dep_err)
+!      bot_between_dep_err= SUM(sed(6)%mass(1:m,1)*WEIGHTS(1:m))
     !calculate erosive flux
     call calc_erosion
+!      DO k=1,KBM1
+!        sed_after_err(k)=SUM(DBLE(sed(6)%conc(1:M,k)*DZ(1:M,K)*D(1:M))*WEIGHTS(1:M))
+!      END DO
+!      total_after_err = SUM(sed_after_err)
+!      bot_after_err = SUM(sed(6)%mass(1:m,1)*WEIGHTS(1:m))
 
 ! J. Ge for fluid mud layer
 
 # if defined (FLUID_MUD)
 
 !# if defined (WAVE_CURRENT_INTERACTION)
-!    call fluid_mud_source_sink(DTsed,sed(1)%Srho,bottom(:,bflag),bed(:,1,ithck),bed(:,1,iporo),sed(1)%frac(:,1),bustrcwmax,bvstrcwmax,,sed(1)%t_ce,sed(1)%rate)
+!    call fluid_mud_source_sink(DTsed,sed(6)%Srho,bottom(:,bflag),bed(:,1,ithck),bed(:,1,iporo),sed(6)%frac(:,1),bustrcwmax,bvstrcwmax,,sed(6)%t_ce,sed(6)%rate)
 !# else
-!    call fluid_mud_source_sink(DTsed,sed(1)%Srho,bottom(:,bflag),bed(:,1,ithck),bed(:,1,iporo),sed(1)%frac(:,1),wubot,wvbot,sed(1)%t_ce,sed(1)%rate)
+!    call fluid_mud_source_sink(DTsed,sed(6)%Srho,bottom(:,bflag),bed(:,1,ithck),bed(:,1,iporo),sed(6)%frac(:,1),wubot,wvbot,sed(6)%t_ce,sed(6)%rate)
 !# endif
-    call fluid_mud_source_sink(DTsed,sed(1)%Srho,bottom(:,bflag),bed(:,1,ithck),bed(:,1,iporo),sed(1)%frac(:,1),taub,sed(1)%t_ce,sed(1)%rate)
+    call fluid_mud_source_sink(DTsed,sed(6)%Srho,bottom(:,bflag),bed(:,1,ithck),bed(:,1,iporo),sed(6)%frac(:,1),taub,sed(6)%t_ce,sed(6)%rate)
 
     call internal_step_fluid_mud
 
@@ -1069,8 +1124,10 @@ End Subroutine Setup_Sed
 
 # endif
 
+!    bot_before_sediment = SUM(sed(6)%mass(1:m,1)*WEIGHTS(1:m))
     !adjust surface bed properties
     call update_surface_bed('susload')
+!    bot_after_sediment = SUM(sed(6)%mass(1:m,1)*WEIGHTS(1:m))
 
     !add new surface layer if necessary
     call add_new_layer
@@ -1118,6 +1175,7 @@ End Subroutine Setup_Sed
                       sed(i)%cflx, &
                       DTsed ,sed_source)
 
+
 !J. Ge for tracer advection
 
 
@@ -1138,11 +1196,11 @@ End Subroutine Setup_Sed
 !Jianzhong GE 03/05/2013
   if(vert_hindered)call hindered_diffusion
 !Jianzhong GE 03/05/2013
+    
 
   do i=1,nsed
     call vdif_scal(sed(i)%cnew,DTsed) 
   end do
-
   !------------------------------------------------------
   !Exchange Concentration on Processor Boundaries
   !------------------------------------------------------
@@ -1248,15 +1306,79 @@ End Subroutine Setup_Sed
     
 
 # if defined (MULTIPROCESSOR)
+!  IF(PAR)THEN
+!    do i=1,nsed 
+!        CALL MPI_REDUCE(sed(i)%cobc, temp_obc(i),1,MPI_DP,MPI_MAX,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!    end do
+  CALL MPI_REDUCE(total_old,temp_old,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
   CALL MPI_REDUCE(total_new,temp_new,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(total_before_vdif,temp_before_vdif,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(total_after_vdif,temp_after_vdif,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  !CALL MPI_REDUCE(total_settle_before,temp_settle_before,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  !CALL MPI_REDUCE(total_settle_after,temp_settle_after,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  !CALL MPI_REDUCE(total_advec_before,temp_advec_before,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+  !CALL MPI_REDUCE(total_advec_after,temp_advec_after,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(total_before_dep,temp_before_dep,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(total_between_dep_err,temp_between_dep_err,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(total_after_err,temp_after_err,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(bot_before_dep,temp_bot_before_dep,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(bot_between_dep_err,temp_bot_between_dep_err,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(bot_after_err,temp_bot_after_err,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(bot_before_sediment,temp_bot_before_sediment,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(bot_after_sediment,temp_bot_after_sediment,1,MPI_DP,MPI_SUM,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(sum_dep,temp_dep,1,MPI_DP,MPI_MAX,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  CALL MPI_REDUCE(sum_err,temp_err,1,MPI_DP,MPI_MAX,MSRID-1,MPI_FVCOM_GROUP,IERR)
+!  ENDIF
 #  endif
 
 
 
     if(msr)then
-      write(*,*)'Total mass                   :',temp_new
+!      write(*,*)'before_dep col        :',temp_before_dep
+!      write(*,*)'before_dep bot        :',temp_bot_before_dep
+!      write(*,*)'between_dep_err col   :',temp_between_dep_err
+!      write(*,*)'between_dep_err bot   :',temp_bot_between_dep_err
+!      write(*,*)'after_err col         :',temp_after_err
+!      write(*,*)'after_err bot         :',temp_bot_after_err
+!      write(*,*)'----------'
+!      write(*,*)'diff_dep_between col  :',temp_between_dep_err-temp_before_dep
+!      write(*,*)'diff_between_err col  :',temp_after_err-temp_between_dep_err
+!      write(*,*)'diff_dep_between bot  :',temp_bot_between_dep_err-temp_bot_before_dep
+!      write(*,*)'diff_between_err bot  :',temp_bot_after_err-temp_bot_between_dep_err
+!      write(*,*)'settle_diff           :',(temp_after_err+temp_bot_after_sediment)-(temp_before_dep+temp_bot_before_dep)
+!      write(*,*)'----------'
+!      write(*,*)'start                 :',temp_old
+      write(*,*)'end                   :',temp_new
+!      write(*,*)'diff                  :',temp_new-temp_old
+!      write(*,*)'----------'
+!      write(*,*)'dep                   :',temp_dep
+!      write(*,*)'err                   :',temp_err
+!      write(*,*)'----------'
+!      write(*,*)'dep - col             :',temp_dep + (temp_between_dep_err-temp_before_dep)
+!      write(*,*)'(dep - err) - col     :',temp_dep -temp_err  + (temp_between_dep_err-temp_before_dep)
+!      do i=1,nsed 
+ !       write(*,*)'Max OBC for sed :',i, temp_obc(i)
+ !     end do
+        
+      !write(*,*)'settle_before :',temp_settle_before
+      !write(*,*)'settle_after  :',temp_settle_after
+      !write(*,*)'----------'
+      !write(*,*)'advec_before :',temp_advec_before
+      !write(*,*)'advec_after  :',temp_advec_after
+      !write(*,*)'advec_diff   :',temp_advec_after-temp_advec_before
     endif
-
+  !if(abs(temp_old) > 1e-10)then
+  !  write(*,*)'old  :',temp_old
+  !endif
+  !if(abs(temp_new) > 1e-10)then
+  !  write(*,*)'new  :',temp_new
+  !endif
+  !if(abs(temp_new-temp_old) > 1e-10)then
+  !  write(*,*)'diff :',temp_new-temp_old
+  !endifsettle_before
+  !if(abs(SUM(sed(6)%mass-cbot_save)) > 1e-3)then
+  !  write(*,*)'sed mass bot',SUM(sed(6)%mass-cbot_save)
+  !endif
 !  call layer_report(1)
   if(dbg_set(dbg_sbr)) write(ipt,*) "End: Advance_Sed "
 
@@ -2015,15 +2137,16 @@ End Subroutine Setup_Sed
       ! limit the tau_ce above original bed thickness 
       ! accumulated layer is positive.
       ! specify the tau_ce as 0.2N/m2 for this fluffy deposited layer.
-      if(bottom(i,dthck)>0.0_sp)tau_ce=0.2_sp 
+      !if(bottom(i,dthck)>0.0_sp)tau_ce=0.2_sp 
 
       bed_por  = bed(i,1,iporo)
       bed_frac = sed(ised)%frac(i,1)
-      tau_w    = taub(i)
+      tau_w    = taub(i)      
       dep      = sed(ised)%dflx(i)
       active   = (1.0-bed_por)*Bed_Frac*(tau_w/tau_ce-1.0)*bottom(i,iactv) + dep
       !erosion_orig  = MAX(DTsed*Erate*(1.0-bed_por)*Bed_Frac*(tau_w/tau_ce-1.0),0.0)
       !sed(ised)%eflx(i) = erosion_orig 
+      
       sed(ised)%eflx(i) = DTsed*erosion(erate,bed_por,bed_frac,tau_w,tau_ce) !min(erosion,active) !geoff
       !sed(ised)%eflx(i) = DTsed*min(erosion(erate,bed_por,bed_frac,tau_w,tau_ce),active) !min(erosion,active) !geoff
 
@@ -2046,7 +2169,7 @@ End Subroutine Setup_Sed
       sed(ised)%eflx(i) = min(sed(ised)%eflx(i) , eflux_avail)
       ! ===============  end new ================================
 
-!      if(i==1)print*,'calc_erosion:',dep,bed(i,1,ithck),eflux_avail,sed(ised)%eflx(i)
+      !if(i==1)print*,'calc_erosion:',dep,bed(i,1,ithck),eflux_avail,sed(ised)%eflx(i)
 
 ! J. Ge for fluid mud layer
 # endif
@@ -2066,8 +2189,8 @@ End Subroutine Setup_Sed
         sed(ised)%conc(i,kbm1) = sed(ised)%conc(i,kbm1) + sed(ised)%eflx(i)/(d(i)*dz(i,kbm1))
 # if defined (WET_DRY)
       else
-        sed(ised)%conc(i,kbm1) = sed(ised)%conc(i,kbm1)
-       end if
+        sed(ised)%conc(i,kbm1) = sed(ised)%conc(i,kbm1) 
+      end if
 # endif
     end do
   end do
@@ -2119,8 +2242,9 @@ End Subroutine Setup_Sed
   use all_vars
   implicit none
   integer  :: ised ,i,mcyc,ncyc,k
-  real(sp) :: wset(kbm1) ,c(kbm1),dx(kbm1),flux,DTmax,eps,DTdep
+  real(sp) :: wset(kbm1) ,c(kbm1),dx(kbm1),flux,DTmax,eps,DTdep,sdrate
   real(sp) :: sal(kbm1),g1(kbm1),ds50,je,tau_cd,cb
+  real(sp) :: trend(kbm1)
   integer  :: cnt,jj,cc
   real(sp),dimension(0:mt,1:kb) :: unode,vnode
   real(sp),dimension(0:mt)      :: cbcn
@@ -2215,28 +2339,35 @@ End Subroutine Setup_Sed
            tau_cd = sed(ised)%tau_cd
         end if
       endif
-
       !set up cycles (use max(CFL) == 1)
       DTmax = Settle_CFL*minval(dx(1:kbm1)/wset(1:kbm1))
       mcyc = int(DTsed/DTmax + 1. - eps)
       DTdep = DTsed/float(mcyc)
 
+      call advect_3(kbm1, c, wset, dx, DTsed, trend)
+      sed(ised)%conc(i,1:kbm1) = sed(ised)%conc(i, 1:kbm1) + trend
+      sdrate = wset(kbm1) * max(0._sp, 1._sp - tau_cd/(taub(i)))! * rho_water))
+      flux = sdrate*sed(ised)%conc(i,kbm1)
+
       !call flux-limited settling equation
-      do ncyc = 1,mcyc
-        if(sed(ised)%stype == 'cohesive' )then
-          call settle_flux_floc(kbm1,c,dx,wset,flux,DTdep,tau_cd,taub(i))
-        else
-          call settle_flux(kbm1,c,dx,wset,flux,DTdep)
-        end if
-      end do
-
+      !do ncyc = 1,mcyc
+      !  if(sed(ised)%stype == 'cohesive' )then
+      !    call settle_flux_floc(kbm1,c,dx,wset,flux,DTdep,tau_cd,taub(i))
+      !  else
+      !    call settle_flux(kbm1,c,dx,wset,flux,DTdep)
+          !call advect_3(kbm1, c, wset, dx, DTsed, trend)
+      !  end if
+      !end do
+      !if (abs(LON(i) - (-4.386943)) < 1e-3 .AND. abs(LAT(i) - 50.364077) < 1e-3) then 
+      !  write(*, *)'Seaton river ',maxval(c), minval(c)
+      !  write(*, *)LON(i) - (-4.386943),LAT(i) - 50.364077 
+      !ENDIF
 ! Jianzhong Ge 03/05/2013
-      sed(ised)%wset0(i,1:kbm1)=wset(1:kbm1)
-! Jianzhong Ge 03/05/2013
-
+     
       !store solution in 3D array
-      sed(ised)%conc(i,1:kbm1) = c(1:kbm1)
-
+      !sed(ised)%conc(i,1:kbm1) = c(1:kbm1)
+      !sdrate = wset(kbm1) * max(0._sp, 1._sp - tau_cd/(taub(i) * (1+RHO1(i, kbm1))*1000))
+      !sed(ised)%conc(i,kbm1) = sed(ised)%conc(i,kbm1) - flux/(d(i)*dz(i,kbm1))
 !J. Ge
 !      !linear effect of critical shear stress for deposition
 !      if(tau_cd<taub(i))then  
@@ -2250,17 +2381,20 @@ End Subroutine Setup_Sed
 !      endif
 !J. Ge
 
+      sed(ised)%wset0(i,1:kbm1)=wset(1:kbm1)
       !store depositional flux
       sed(ised)%dflx(i) = flux 
 
       !shutdown erosion if node is inactive 
       sed(ised)%dflx(i) = sed(ised)%dflx(i)
+      sed(ised)%conc(i,kbm1) = sed(ised)%conc(i,kbm1) - sed(ised)%dflx(i)/(d(i)*dz(i,kbm1))
     else
       sed(ised)%dflx(i) = 0.0
     endif
     end do
   end do
 
+# endif
 ! J. Ge for fluid mud layer
 # if defined (FLUID_MUD)
   Settling = 0.0_SP
@@ -2278,11 +2412,381 @@ End Subroutine Setup_Sed
     end do
   end do  
 # endif
-
   if(dbg_set(dbg_sbr)) write(ipt,*) "End: Calc_Deposition "
 
   End Subroutine Calc_Deposition
 
+   SUBROUTINE advect_3(nk, c_old, w, h, dt, trend)
+      INTEGER,  INTENT(IN)  :: nk
+      REAL(sp), INTENT(IN)  :: c_old(1:nk)
+      REAL(sp), INTENT(IN)  :: w(1:nk-1)
+      REAL(sp), INTENT(IN)  :: h(1:nk)
+      REAL(sp), INTENT(IN)  :: dt
+      REAL(sp), INTENT(OUT) :: trend(1:nk)
+
+      INTEGER, PARAMETER :: n_itermax=100
+      REAL(sp) :: cmax_no
+      REAL(sp) :: cfl(1:nk-1)
+      INTEGER  :: n_iter, n_count, jk
+      REAL(sp) :: c(1:nk)
+      REAL(sp) :: tr_u(1:nk-1)
+      REAL(sp) :: tr_c(1:nk-1)
+      REAL(sp) :: tr_d(1:nk-1)
+      REAL(sp) :: delta_tr_u(1:nk-1)
+      REAL(sp) :: delta_tr(1:nk-1)
+      REAL(sp) :: ratio(1:nk-1)
+      REAL(sp) :: x_fac(1:nk-1)
+      REAL(sp) :: phi_lim(1:nk-1)
+      REAL(sp) :: limiter(1:nk-1)
+      REAL(sp) :: flux_if(1:nk-1)
+
+      c(:) = c_old(:)
+      IF(ALL(abs(c_old) > 1e-8)) THEN
+
+          ! get maximum Courant number:
+          cfl = ABS(w) * dt / (0.5_sp * (h(2:nk) + h(1:nk-1)))
+          cmax_no = MAXVAL(cfl)
+
+          ! number of iterations:
+          n_iter = MIN(n_itermax, INT(cmax_no) + 1)
+
+          ! effective Courant number:
+          cfl = cfl/n_iter
+
+          DO n_count=1,n_iter ! Iterative loop
+             ! Determine tracer concentration at 1.5 upstream (tr_u), 0.5 upstream (tr_c), 0.5 downstream (tr_d) from interface
+             IF (nk.gt.2) THEN
+                ! More than 2 vertical wet points
+                IF (nk.gt.3) THEN
+                   WHERE (w(2:nk-2).ge.0._sp)
+                      !upward movement
+                      tr_u(2:nk-2)=c(4:nk)
+                      tr_c(2:nk-2)=c(3:nk-1)
+                      tr_d(2:nk-2)=c(2:nk-2)
+                   ELSEWHERE
+                      ! downward movement
+                      tr_u(2:nk-2)=c(1:nk-3)
+                      tr_c(2:nk-2)=c(2:nk-2)
+                      tr_d(2:nk-2)=c(3:nk-1)
+                   ENDWHERE
+                ENDIF
+
+                ! Interface between surface layer and the next
+                IF (w(1).ge.0._sp) THEN
+                   ! upward movement
+                   tr_u(1)=c(3)
+                   tr_c(1)=c(2)
+                   tr_d(1)=c(1)
+                ELSE
+                   ! downward movement
+                   tr_u(1)=c(1)
+                   tr_c(1)=c(1)
+                   tr_d(1)=c(2)
+                ENDIF
+
+                ! Interface between bottom layer and the previous
+                IF (w(nk-1).ge.0._sp) THEN
+                   ! upward movement
+                   tr_u(nk-1)=c(nk)
+                   tr_c(nk-1)=c(nk)
+                   tr_d(nk-1)=c(nk-1)
+                ELSE
+                   ! downward movement
+                   tr_u(nk-1)=c(nk-2)
+                   tr_c(nk-1)=c(nk-1)
+                   tr_d(nk-1)=c(nk)
+                ENDIF
+             ELSE
+                ! only 2 vertical wet points, i.e. only 1 interface
+                IF (w(1).ge.0._sp) THEN
+                   ! upward movement
+                   tr_u(1)=c(2)
+                   tr_c(1)=c(2)
+                   tr_d(1)=c(1)
+                ELSE
+                   ! downward movement
+                   tr_u(1)=c(1)
+                   tr_c(1)=c(1)
+                   tr_d(1)=c(2)
+                ENDIF
+             ENDIF
+
+             delta_tr_u = tr_c - tr_u
+             delta_tr = tr_d - tr_c
+             WHERE (delta_tr * delta_tr_u > 0._sp)
+                ! Monotonic function over tr_u, tr_c, r_d
+
+                ! Compute slope ratio
+                ratio = delta_tr_u / delta_tr
+
+                ! QUICKEST flux limiter
+                x_fac = (1._sp - 2._sp * cfl) / 6._sp
+                phi_lim = (0.5_sp + x_fac) + (0.5_sp - x_fac) * ratio
+                limiter = MIN(phi_lim, 2._sp / (1._sp - cfl), 2._sp * ratio / (cfl + 1.e-10_sp))
+
+                ! Compute limited flux
+                flux_if = w * (tr_c + 0.5_sp * limiter * (1._sp - cfl) * delta_tr)
+             ELSEWHERE
+                ! Non-monotonic, use 1st order upstream
+                flux_if = w * tr_c
+             ENDWHERE
+
+             ! Compute pseudo update for trend aggregation:
+             c(1:nk-1) = c(1:nk-1) + dt / real(n_iter, sp) / h(1:nk-1) * flux_if
+             c(2:nk)   = c(2:nk)   - dt / real(n_iter, sp) / h(2:nk)   * flux_if
+
+          ENDDO ! Iterative loop
+
+          ! Estimate rate of change from pseudo state updates (source splitting):
+          trend = (c - c_old) / dt
+        ELSE
+          trend = 0
+        ENDIF
+   END SUBROUTINE
+
+!=================================================================== ===
+!                                                                      !
+!  This routine computes the vertical settling (sinking) of suspended  !
+!  sediment via a semi-Lagrangian advective flux algorithm. It uses a  !
+!  parabolic,  vertical reconstructuion of the suspended  sediment in  !
+!  the water column with PPT/WENO constraints to avoid oscillations.   !
+!                                                                      !
+!  References:                                                         !
+!                                                                      !
+!  Colella, P. and P. Woodward, 1984: The piecewise parabolic method   !
+!    (PPM) for gas-dynamical simulations, J. Comp. Phys., 54, 174-201. !
+!                                                                      !
+!  Liu, X.D., S. Osher, and T. Chan, 1994: Weighted essentially        !
+!    nonoscillatory shemes, J. Comp. Phys., 115, 200-212.              !
+!                                                                      !
+!  Warner, J.C., C.R. Sherwood, R.P. Signell, C.K. Harris, and H.G.    !
+!    Arango, 2008:  Development of a three-dimensional,  regional,     !
+!    coupled wave, current, and sediment-transport model, Computers    !
+!    & Geosciences, 34, 1284-1306.                                     !
+!                                                                      !
+!=======================================================================
+  Subroutine calc_sed_settling
+
+  implicit none
+!
+!  Local variable declarations.
+!
+  integer :: i, indx, ised, j, k, ks
+
+  real(sp) :: cff, cu, cffL, cffR, dltL, dltR
+
+  integer, dimension(0:kb) :: ksource
+
+  real(sp), dimension(0:kb) :: FC
+
+  real(sp), dimension(0:kb) :: Hz_inv
+  real(sp), dimension(0:kb) :: Hz_inv2
+  real(sp), dimension(0:kb) :: Hz_inv3
+  real(sp), dimension(0:kb) :: qc
+  real(sp), dimension(0:kb) :: qR
+  real(sp), dimension(0:kb) :: qL
+  real(sp), dimension(0:kb) :: WR
+  real(sp), dimension(0:kb) :: WL
+  logical :: LINEAR_CONTINUATION
+  logical :: NEUMANN
+
+  if(dbg_set(dbg_sbr)) write(ipt,*) "Start: calc_sed_settling "
+  LINEAR_CONTINUATION=.true.
+  NEUMANN=.true.
+!
+!-----------------------------------------------------------------------
+!  Add sediment vertical sinking (settling) term.
+!-----------------------------------------------------------------------
+!
+!  Compute inverse thicknesses to avoid repeated divisions.
+!
+
+!  DO ised=1,NST
+!    print*,'before settling:',ised,maxval(sed(ised)%conc),minval(sed(ised)%conc)
+!  end do
+
+  do i=1,m
+    DO k=1,kbm1
+       Hz_inv(k)=1.0_sp/(dt(i)*dz(i,k))
+    END DO
+    DO k=2,kbm1
+       Hz_inv2(k)=1.0_sp/(dt(i)*dz(i,k)+dt(i)*dz(i,k-1))
+    END DO
+    DO k=2,kbm1-1
+       Hz_inv3(k)=1.0_sp/(dt(i)*(dz(i,k-1)+dz(i,k)+dz(i,k+1))) 
+    END DO
+!
+!  Copy concentration of suspended sediment into scratch array "qc"
+!  (q-central, restrict it to be positive) which is hereafter
+!  interpreted as a set of grid-box averaged values for sediment
+!  concentration.
+!
+
+    SED_LOOP: DO ised=1,nsed
+    DO k=1,kbm1
+       qc(k)=sed(ised)%conc(i,k)
+    END DO
+!
+!-----------------------------------------------------------------------
+!  Vertical sinking of suspended sediment.
+!-----------------------------------------------------------------------
+!
+!  Reconstruct vertical profile of suspended sediment "qc" in terms
+!  of a set of parabolic segments within each grid box. Then, compute
+!  semi-Lagrangian flux due to sinking.
+!
+    DO k=2,kbm1
+        FC(k)=(qc(k-1)-qc(k))*Hz_inv2(k)
+    END DO
+
+    DO k=kbm1-1,2,-1
+       dltR=(dt(i)*dz(i,k))*FC(k)
+       dltL=(dt(i)*dz(i,k))*FC(k+1)
+       cff=dt(i)*(dz(i,k-1)+2.0_sp*dz(i,k)+dz(i,k+1))
+       cffR=cff*FC(k)
+       cffL=cff*FC(k+1)
+!
+!  Apply PPM monotonicity constraint to prevent oscillations within the
+!  grid box.
+!
+       IF ((dltR*dltL).le.0.0_sp) THEN
+         dltR=0.0_sp
+         dltL=0.0_sp
+       ELSE IF (ABS(dltR).gt.ABS(cffL)) THEN
+         dltR=cffL
+       ELSE IF (ABS(dltL).gt.ABS(cffR)) THEN
+         dltL=cffR
+       END IF
+!
+!  Compute right and left side values (qR,qL) of parabolic segments
+!  within grid box Hz(k); (WR,WL) are measures of quadratic variations.
+!
+!  NOTE: Although each parabolic segment is monotonic within its grid
+!        box, monotonicity of the whole profile is not guaranteed,
+!        because qL(k+1)-qR(k) may still have different sign than
+!        qc(k+1)-qc(k).  This possibility is excluded, after qL and qR
+!        are reconciled using WENO procedure.
+!
+       cff=(dltR-dltL)*Hz_inv3(k)
+       dltR=dltR-cff*(dt(i)*dz(i,k-1)) 
+       dltL=dltL+cff*(dt(i)*dz(i,k+1)) 
+       qR(k)=qc(k)+dltR
+       qL(k)=qc(k)-dltL
+       WR(k)=(2.0_sp*dltR-dltL)**2
+       WL(k)=(dltR-2.0_sp*dltL)**2
+    END DO
+    cff=1.0E-14_sp
+    DO k=kbm1-1,3,-1
+       dltL=MAX(cff,WL(k  ))
+       dltR=MAX(cff,WR(k-1))
+       qR(k)=(dltR*qR(k)+dltL*qL(k-1))/(dltR+dltL)
+       qL(k-1)=qR(k)
+    END DO
+    FC(1)=0.0_sp              ! no-flux boundary condition
+    if(LINEAR_CONTINUATION)then
+      qL(1)=qR(2)
+      qR(1)=2.0_sp*qc(1)-qL(1)
+    elseif(NEUMANN)then
+      qL(1)=qR(2)
+      qR(1)=1.5_sp*qc(1)-0.5_sp*qL(1)
+    else
+      qR(1)=qc(1)         ! default strictly monotonic
+      qL(1)=qc(1)         ! conditions
+      qR(2)=qc(1)
+    endif
+    if(LINEAR_CONTINUATION)then
+      qR(kbm1)=qL(kbm1-1)
+      qL(kbm1)=2.0_sp*qc(kbm1)-qR(kbm1)
+    elseif(NEUMANN)then
+      qR(kbm1)=qL(kbm1-1)
+      qL(kbm1)=1.5_sp*qc(kbm1)-0.5_sp*qR(kbm1)
+    else
+      qL(kbm1-1)=qc(kbm1)                 ! bottom grid boxes are
+      qR(kbm1)=qc(kbm1)                 ! re-assumed to be
+      qL(kbm1)=qc(kbm1)                 ! piecewise constant.
+    endif
+!
+!  Apply monotonicity constraint again, since the reconciled interfacial
+!  values may cause a non-monotonic behavior of the parabolic segments
+!  inside the grid box.
+!
+    DO k=kbm1,1,-1
+       dltR=qR(k)-qc(k)
+       dltL=qc(k)-qL(k)
+       cffR=2.0_sp*dltR
+       cffL=2.0_sp*dltL
+       IF ((dltR*dltL).lt.0.0_sp) THEN
+         dltR=0.0_sp
+         dltL=0.0_sp
+       ELSE IF (ABS(dltR).gt.ABS(cffL)) THEN
+         dltR=cffL
+       ELSE IF (ABS(dltL).gt.ABS(cffR)) THEN
+         dltL=cffR
+       END IF
+       qR(k)=qc(k)+dltR
+       qL(k)=qc(k)-dltL
+    END DO
+!
+!  After this moment reconstruction is considered complete. The next
+!  stage is to compute vertical advective fluxes, FC. It is expected
+!  that sinking may occurs relatively fast, the algorithm is designed
+!  to be free of CFL criterion, which is achieved by allowing
+!  integration bounds for semi-Lagrangian advective flux to use as
+!  many grid boxes in upstream direction as necessary.
+!
+!  In the two code segments below, WL is the z-coordinate of the
+!  departure point for grid box interface z_w with the same indices;
+!  FC is the finite volume flux; ksource(:,k) is index of vertical
+!  grid box which contains the departure point (restricted by kbm1).
+!  During the search: also add in content of whole grid boxes
+!  participating in FC.
+!
+    cff=DTsed*ABS(sed(ised)%wset)
+    DO k=kbm1,1,-1
+       FC(k+1)=0.0_sp
+       WL(k)=dt(i)*zz(i,k+1)+cff
+       WR(k)=dt(i)*dz(i,k)*qc(k)
+       ksource(k)=k
+    END DO
+    DO k=kbm1,1,-1
+       DO ks=k,2,-1
+         IF (WL(k).gt.dt(i)*zz(i,ks)) THEN
+            ksource(k)=ks-1
+            FC(k+1)=FC(k+1)+WR(ks)
+         END IF
+       END DO
+    END DO
+!
+!  Finalize computation of flux: add fractional part.
+!
+    DO k=kbm1,1,-1
+       ks=ksource(k)
+       cu=MIN(1.0_sp,(WL(k)-dt(i)*zz(i,ks+1))*Hz_inv(ks))
+       FC(k+1)=FC(k+1)+                                      &
+     &           dt(i)*dz(i,ks)*cu*                                  &
+     &           (qL(ks)+                                      &
+     &            cu*(0.5_sp*(qR(ks)-qL(ks))-                &
+     &                (1.5_sp-cu)*                               &
+     &              (qR(ks)+qL(ks)-2.0_sp*qc(ks))))
+     END DO
+     DO k=kbm1,1,-1
+        sed(ised)%conc(i,k)=sed(ised)%conc(i,k)+(FC(k)-FC(k+1))
+     END DO
+     sed(ised)%dflx(i)=FC(kb)
+
+    END DO SED_LOOP
+
+  END DO
+
+!  DO ised=1,NST
+!    print*,'after settling:',ised,maxval(sed(ised)%conc),minval(sed(ised)%conc)
+!  end do
+
+  if(dbg_set(dbg_sbr)) write(ipt,*) "End: calc_sed_settling "
+
+  RETURN
+
+  End Subroutine calc_sed_settling
 !==========================================================================
 ! Calculate settling velocity of cohesive sediment using the method of
 !           Qingyu Sha (including floccuation process)
@@ -2510,6 +3014,7 @@ End Subroutine Setup_Sed
   end do
 
   !set bottom flux (> 0 = deposition)
+  ! (-conv(n+1)+conv(n) + diss(n+1)-diss(n)) 
   flux = flux + deltat*(conv(n+1)-diss(n+1))
 
   if(dbg_set(dbg_sbr)) write(ipt,*) "End: Settle_Flux "
@@ -3245,7 +3750,7 @@ End Subroutine Setup_Sed
 
    END SUBROUTINE UPDATE_DEPTH
 
-# endif
-   
+
+   # endif
 
 End Module Mod_Sed 

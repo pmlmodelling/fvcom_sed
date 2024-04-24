@@ -29,7 +29,6 @@
 MODULE MOD_VECTOR_PROJECTION
   
   USE ALL_VARS
-  USE mod_utils
 # if defined (MULTIPROCESSOR)
   USE MOD_PAR
 # endif
